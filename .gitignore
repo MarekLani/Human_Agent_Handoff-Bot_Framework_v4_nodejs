@@ -1,0 +1,6 @@
+node_modules
+lib
+/package-lock.json
+Copy.env
+localCopy.settings.json
+PublishProfiles

@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <title>Web Chat: Full-featured bundle</title>
+   <script src="https://cdn.botframework.com/botframework-webchat/latest/webchat.js"></script>
+   <style>
+    html, body { height: 100% }
+    body { margin: 0 }
+    #webchat {
+      height: 100%;
+      width: 100%;
+    }
+   </style>
+  </head>
+   <body>
+    <div id="webchat" role="main"></div>
+    <script>
+     (async function () {
+       //Change url bellow to url of your bot web app
+       const res = await fetch('http://localhost:3978/api/getdirectlinetoken', { method: 'POST' });
+       const { token } = await res.json();
+	   
+	   // We are using a customized store to add hooks to connect event
+        const store = window.WebChat.createStore({}, ({ dispatch }) => next => action => {
+          if (action.type === 'DIRECT_LINE/CONNECT_FULFILLED') {
+            //When we receive DIRECT_LINE/CONNECT_FULFILLED action, we will send an event activity using WEB_CHAT/SEND_EVENT
+			//This event will connect agent to user + it will pull history from storage
+            dispatch({
+              type: 'WEB_CHAT/SEND_EVENT',
+              payload: {
+                name: 'webchat/join',
+                value: { language: window.navigator.language }
+              }
+            });
+          }
+          return next(action);
+        });
+	   
+       window.WebChat.renderWebChat({
+         directLine: window.WebChat.createDirectLine({ token }),
+		 store
+       }, document.getElementById('webchat'));
+
+       document.querySelector('#webchat > *').focus();
+     })().catch(err => console.error(err));
+    </script>
+  </body>
+</html>

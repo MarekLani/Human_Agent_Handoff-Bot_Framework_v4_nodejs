@@ -33,9 +33,7 @@ namespace TranscriptsReader
             List<BlobDetail> blobResults = new List<BlobDetail>();
             if (CloudStorageAccount.TryParse(Environment.GetEnvironmentVariable("AzureStorageConnectionString"), out storageAccount))
             {
-                // If the connection string is valid, proceed with operations against Blob
-                // storage here.
-                // ADD OTHER OPERATIONS HERE
+                // If the connection string is valid, proceed with operations against Blob storage here.
 
                 var cloudBlobClient = storageAccount.CreateCloudBlobClient();
                 CloudBlobContainer blobContainer = cloudBlobClient.GetContainerReference(container);
@@ -54,7 +52,6 @@ namespace TranscriptsReader
             }
 
             return (ActionResult)new OkObjectResult(JsonConvert.SerializeObject(blobResults));
-            //: new BadRequestObjectResult("Please pass a name on the query string or in the request body");
         }
     }
 

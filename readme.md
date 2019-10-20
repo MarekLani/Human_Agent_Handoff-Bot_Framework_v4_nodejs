@@ -1,20 +1,22 @@
 # Human agent handoff with Bot Framework v4 (Node.js)
 
-This repository contains sample code which implements human handoff logic using Bot Framework v4 SDK in Node.js. This handoff includes also functionality of feeding newly connected agent chat window with previous chat history between bot and user, who requested handoff to human agent. On user side this code supports all channels supported by Bot Service. On agent side there is very simple console implemented on top of Web Chat component connected to Bot Application thru Direct Line. 
+This repository contains sample code which implements **human handoff logic** using Bot Framework v4 SDK in Node.js. This handoff includes also functionality of **feeding newly connected agent chat window** with previous **chat history** between bot and user, who requested handoff to human agent.
 
-**Note**: This is prove of concept solution and for production ready use, it requires further development. This text is not describing basic concepts behind Bot Framework and it is recommended, you have some knowledge of Bot Framework SDK before continuing with reading this text. 
+On user side this code supports all channels supported by Bot Service. Human agent side is implemented as simple console on top of Web Chat component connected to Bot Application thru Direct Line. 
+
+**Note**: This is prove of concept solution and for production ready use it requires further development. This text is not describing basic concepts behind Bot Framework and it is recommended, you have some knowledge of Bot Framework SDK before continuing with reading this text. 
 
 ## Prerequisites  
 
 Besides using Bot Framework and Bot Service, solution is using several other Azure Services, namely:
 
-- **CosmosDB** - to store conversation references, create agent support cases and conversation states.
+- **CosmosDB** - to store conversation references, agent support cases and conversation states.
 
 - **Azure Storage** 
   - Blob storage to store transcripts (history of conversations)
-  - Storage queue to store support requests and hand them over to agent in FIFO manner.
+  - Storage queue to store incoming support requests and hand them over to human agent in FIFO manner.
 
-- **Azure Functions** - extraction of user chat history is currently implemented in C#, as C# SDK provided simpler way how to read history stored in blobs. You can find more details further in the text.
+- **Azure Functions** - extraction of user chat history is currently implemented in C#, as at the time of creation of this sample C# SDK provided simpler way how to read history stored in blobs. You can find more details in latter sections of this text.
 
 **To enable storing of bot-user chat conversations**, we used *TranscriptLoggerMiddleware* which is part of botbuilder-core package. Middlewares are added to message processing pipeline in index.js file. See initialization of *TranscriptLoggerMiddleware*  below:
 
@@ -32,13 +34,13 @@ adapter.use(transcriptMiddleware);
 
 So you can use this sample, please refer to *.env* file, where you should provide all the necessary connection string to services stated above. 
 
-Also you will need to allow CORS on your Web App where bot backend is running to enable requesting of Direct Line tokens. Please refer to [this page](https://social.msdn.microsoft.com/Forums/azure/en-US/5bd37aa7-eed7-4ddd-a560-c36a09e1674d/how-can-i-enable-the-cors-on-my-app-hosted-on-azure-portal?forum=windowsazurewebsitespreview) to get more information, on how to enable CORS on Azure Web App.
+Also you will need to allow CORS on your Web App hosting bot backend to enable requesting of Direct Line tokens. Please refer to [this page](https://social.msdn.microsoft.com/Forums/azure/en-US/5bd37aa7-eed7-4ddd-a560-c36a09e1674d/how-can-i-enable-the-cors-on-my-app-hosted-on-azure-portal?forum=windowsazurewebsitespreview) to get more information, on how to enable CORS on Azure Web App.
 
 ## Handoff flow
 
-There are three main part to the handoff to human agent flow. It is initialization, message exchange and closing of support case (conversation with agent). These part are depicted on diagrams below. Under each diagram, you will find flow description together with code which implements the flow.
+There are three main parts to the *handoff to human agent* flow. It is *initialization*, *message exchange* and *closing of support case* (conversation with agent). These parts are depicted on diagrams below. In second part of this section you will find selected pieces of code, which enable user to human agent handoff.
 
-### Initialization of user to human agent 
+### Initialization of user to human agent handoff
 
 ![handoff1](./img/handoff1.png)
 
@@ -46,14 +48,14 @@ The most complex part to human agent handoff logic is initialization. It happens
 
 1. User needs to request handoff. Currently initiated by sending message with text handoff. This interrupt is enabled thru *InterruptableDialog* class.
 2. Request for human agent support is stored in storage queue.
-3. In third step support request item is created in Cosmos DB. This item is used to track status of request (Waiting for agent, Active, Closed by agent, closed). Also user conversation reference is stored to Cosmos DB to enable message forwarding from agent to user.
-4. Agent opens simple agent console (Web Chat Window). Once Web Chat is sucesfully connected to bot backend via Direct Line it sends Web Chat join event. 
-5. After Web Chat join event is received on bot backend side, it dequeues support request form queue
-6. In next step, user conversation reference is obtained form Cosmos DB (based on user id read from dequeued item)
-7. Support case item in Cosmos DB is updated - Agent is linked to it and status is changed to active. In this step agent conversation reference is stored in Cosmos DB as well to enable message forwarding from user to agent.
-8. Bot Framework obtains chat history from Blob storage. As mentioned before this is done via calling Azure Function with C# code, which returns all the activities from last conversation between user and bot. 
-9. These activities (transcript) is send to agent chat window as [proactive message](https://docs.microsoft.com/en-us/azure/bot-service/bot-builder-howto-proactive-message?view=azure-bot-service-4.0&tabs=csharp).
-10. Once all the history is loaded to agent's chat window, bot backend sends confirmation to user, that he or she has been successfully connected with agent.
+3. In third step support request item is created in Cosmos DB. This item is used to track status of request (Waiting for agent, Active, Closed by agent, Closed). 
+4. Agent opens simple agent console (Web Chat Window). Once Web Chat is successfully connected to bot backend via Direct Line it sends Web Chat join event. 
+5. After Web Chat join event is received by bot backend, it dequeues support request form the queue
+6. In next step, user conversation reference is obtained from Cosmos DB (Based on user id read from dequeued item. Conversation references for user and agent are stored every time bot backend receives conversation update event)
+7. Support case item in Cosmos DB is updated - Agent is linked to it and status is changed to active.
+8. Bot Framework obtains chat history from Blob storage. As mentioned before this is done via calling Azure Function, which returns all the activities from last conversation between user and bot. 
+9. These activities (transcript) are sent to agent chat window as [proactive messages](https://docs.microsoft.com/en-us/azure/bot-service/bot-builder-howto-proactive-message?view=azure-bot-service-4.0&tabs=csharp).
+10. Once all the chat history is loaded to agent's chat window, bot backend sends confirmation to user, that he has been successfully connected with agent.
 
 ### Handoff message exchange
 
@@ -63,9 +65,9 @@ The most complex part to human agent handoff logic is initialization. It happens
 
 ![handoff3](./img/handoff3.png)
 
-Currently end of support case - closing of user:agent conversation is possible only by agent. Closing of support case is initialized by agent typing message with text "End". As a next step status of respective Support case item in Cosmos DB is changed to Closed By agent and user conversation reference is obtained. User is send ask for providing feedback. After feedback is provided, support case status is set to Closed.
+Currently end of support case - closing of user:agent conversation is possible only by agent. Closing of support case is initialized by agent typing message with text "end". As a next step status of respective Support case item in Cosmos DB is changed to Closed By agent and user conversation reference is obtained. User is send ask for providing feedback. After feedback is provided, support case status is set to Closed.
 
-### Code for important parts of the solution
+### Code of important parts of the solution
 
 Bellow there are stated selected pieces of code, which implement logic described in previous sections.
 
@@ -108,7 +110,7 @@ class InterruptableDialog extends ComponentDialog {
 
 #### Handoff dialog
 
-Handoff dialog is run when user requests handoff - invokes handoff interrupt. For agent it is default dialog. Class contains logic for message forwarding between user and agent and vice versa. It contains also part of initialization logic for enqueuing support case request and creating Support case item in Cosmos DB and storing user conversation reference. It contains logic for ending support case as well.
+Handoff dialog is run when user requests handoff - invokes handoff interrupt. For agent it is default dialog. Class contains logic for message forwarding between user and agent and vice versa. It contains also parts of initialization logic - enqueuing support case request, creating Support case item in Cosmos DB and storing user conversation reference. It contains logic for closing of support case as well.
 
 ```javascript
 class HandoffDialog extends ComponentDialog {
@@ -205,7 +207,7 @@ class HandoffDialog extends ComponentDialog {
 
 #### Agent console
 
-Agent console is at this point simple html page which contains Web Chat window, which  connects to bot backend via Direct Line. Direct Line token is generated and provided to Web Chat component directly from API endpoint defined in bot backend. At this point this token is created with username "Agent" every time it is requested. Bellow you can see code of agent console.
+Agent console is simple html page containing Web Chat window, which connects to bot backend via Direct Line. Direct Line token is generated and provided to Web Chat component directly from API endpoint defined in bot backend. In this implementation, direct line token is created with username "Agent" every time it is requested. Bellow you can see code of agent console.
 
 ```html
 <!DOCTYPE html>
@@ -352,7 +354,7 @@ this.onTurn(async (context, next) => {
 
 #### Azure Function for loading chat history from blob storage
 
-Logic for obtaining chat history from blob storage is implemented in separate project, which is part of this repository. It is C# Azure Function project (see TranscriptReaderFunctions folder). Reason for this was, that conversation transcript are automatically stored in blob storage in per conversation folder structure, while each message is placed into separate json blob. At time of implementation of this project, there was no straightforward way how to traverse folder structure in Blob Storage using node.js SDK. There are two functions that are being called from bot backend, one for listing all blobs (json files) for specific conversation and second for downloading of blob (json file).
+Logic for obtaining chat history from blob storage is implemented in separate project, which is part of this repository. It is C# Azure Function project (see TranscriptReaderFunctions folder). Reason for separate implementation was that conversation transcript are automatically stored in blob storage in per conversation folder structure, while each message is placed into separate json blob. At the time of implementation of this project, there was no straightforward way how to traverse folder structure in Blob Storage using node.js SDK. There are two functions that are being called from bot backend, one for listing all blobs (json files) for specific conversation and second for blob downloading (json file).
 
 ```c#
 public static class ListBlobsInFolder
@@ -377,7 +379,6 @@ public static class ListBlobsInFolder
         {
             // If the connection string is valid, proceed with operations against Blob
             // storage here.
-            // ADD OTHER OPERATIONS HERE
 
             var cloudBlobClient = storageAccount.CreateCloudBlobClient();
             CloudBlobContainer blobContainer = cloudBlobClient.GetContainerReference(container);
@@ -396,7 +397,6 @@ public static class ListBlobsInFolder
         }
 
         return (ActionResult)new OkObjectResult(JsonConvert.SerializeObject(blobResults));
-        //: new BadRequestObjectResult("Please pass a name on the query string or in the request body");
     }
 }
 ```
@@ -443,6 +443,6 @@ public static class DownloadBlob
 This solution implements flow to enable user to human agent handoff. It is prove of concept solution and few areas are simplified and would require further development so it can be used in production. We see space for improvement mainly in following areas:
 
 - **Extending agent console** - agent console should provide more capabilities besides connecting agent to user. It should enable agent login, support case tracking and advanced logic of assigning agents to support cases. It can eventually be substituted by existing human agent solution. However in such case work on integration needs to be done.
-- **Enabling multiple support cases being opened per agent** - currently direct line token is always generated for user with id agent. It should be changed to support multiple agents being connected at once. Be aware that bot backend is recognizing agent by **user id field** which arrives as part of activity. Bot backend expect user id field to contains **string "agent"** so it can recognize the agent user properly.
+- **Enabling multiple support cases being opened per agent** - currently direct line token is always generated for user with user id field equal to "Agent". It should be changed to support multiple agents being connected at once. Be aware that bot backend is recognizing agent by **user id field** which arrives as part of activity. Bot backend expect user id field to contain **string "Agent"** so it can recognize the agent user properly.
 - **Implementing more advanced way of closing of support case** - currently only agent can initiate closing of support case by writing message containing text "end". Closing of support case should be implemented in more advanced manner and user should be allowed to end support case as well. Support case should be ended also by certain time of inactivity. 
 - **Storing user feedback** - after support case is closed, user is prompted to provide feedback. This feedback is not being stored at this point.
